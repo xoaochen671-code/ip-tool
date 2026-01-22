@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"fmt"
-	"net"
 	"os"
 
 	"github/shawn/ip-tool/internal/tui"
@@ -32,8 +31,8 @@ func printIP(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		target = args[0]
 	}
-	isIP := net.ParseIP(target) != nil
-	p := tea.NewProgram(tui.InitialModel(target, showDetail, isIP))
+
+	p := tea.NewProgram(tui.InitialModel(target, showDetail))
 
 	// 运行程序
 	if _, err := p.Run(); err != nil {

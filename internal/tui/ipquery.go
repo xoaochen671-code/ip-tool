@@ -5,6 +5,7 @@ import (
 	"github/shawn/ip-tool/internal/scanner"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -12,24 +13,23 @@ import (
 )
 
 type ipQueryApp struct {
-	target   string
-	ipv4     string
-	ipv6     string
-	ipInfo   scanner.IPInfo
-	message  string
-	loading  bool
-	isIP     bool
-	isDetail bool
-	spinner  spinner.Model
+	target         string
+	ipv4           string
+	ipv6           string
+	ipInfo         scanner.IPInfo
+	message        string
+	loading        bool
+	isDetail       bool
+	fetchingDetail bool
+	spinner        spinner.Model
 }
 
-func InitialModel(target string, isDetail bool, isIP bool) *ipQueryApp {
+func InitialModel(target string, isDetail bool) *ipQueryApp {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	return &ipQueryApp{
 		target:   target,
 		loading:  true,
-		isIP:     isIP,
 		isDetail: isDetail,
 		spinner:  s,
 	}
@@ -37,17 +37,14 @@ func InitialModel(target string, isDetail bool, isIP bool) *ipQueryApp {
 
 func (q *ipQueryApp) Init() tea.Cmd {
 	cmds := []tea.Cmd{q.spinner.Tick}
-	if q.isIP {
-		if ipObj := net.ParseIP(q.target); ipObj.To4() != nil {
+
+	if ipObj := net.ParseIP(q.target); ipObj != nil {
+		if ipObj.To4() != nil {
 			q.ipv4 = q.target
 			q.ipv6 = "Not Applicable"
 		} else {
 			q.ipv6 = q.target
 			q.ipv4 = "Not Applicable"
-		}
-
-		if q.isDetail {
-			cmds = append(cmds, q.fetchDetailCmd(q.target))
 		}
 
 		q.checkLoading()
@@ -71,6 +68,7 @@ func (q *ipQueryApp) fetchDetailCmd(ip string) tea.Cmd {
 type v4Msg string
 type v6Msg string
 type detailMsg scanner.IPInfo
+type clearMessageMsg struct{}
 
 func (q *ipQueryApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -79,39 +77,71 @@ func (q *ipQueryApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "q", "ctrl+c":
 			return q, tea.Quit
 
+		case "d":
+			if !q.isDetail {
+				q.isDetail = true
+				q.loading = true // 重新进入加载状态
+
+				// 确定查询目标：优先 IPv4
+				targetIP := q.ipv4
+				if targetIP == "" || targetIP == "Not Detected" || targetIP == "Not Applicable" {
+					targetIP = q.ipv6
+				}
+
+				if targetIP != "" && targetIP != "..." && targetIP != "Not Detected" {
+					return q, q.fetchDetailCmd(targetIP)
+				}
+			}
+
 		case "4":
 			if q.ipv4 != "" && q.ipv4 != "Not Detected" {
 				clipboard.WriteAll(q.ipv4)
 				q.message = "Copied IPv4 to clipboard!"
+				return q, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+					return clearMessageMsg{}
+				})
 			}
 
 		case "6":
 			if q.ipv6 != "" && q.ipv6 != "Not Detected" {
 				clipboard.WriteAll(q.ipv6)
 				q.message = "Copied IPv6 to clipboard!"
+				return q, tea.Tick(2*time.Second, func(t time.Time) tea.Msg {
+					return clearMessageMsg{}
+				})
 			}
 		}
+
+	case clearMessageMsg:
+		q.message = ""
+		return q, nil
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		q.spinner, cmd = q.spinner.Update(msg)
 		return q, cmd
+
 	case v4Msg:
 		q.ipv4 = string(msg)
 		q.checkLoading()
-		if !q.isIP && q.isDetail && q.ipv4 != "Not Detected" && q.ipInfo.Status == "" {
+		if q.isDetail && q.ipv4 != "Not Detected" && !q.fetchingDetail && q.ipInfo.Status == "" {
+			q.fetchingDetail = true
 			return q, q.fetchDetailCmd(q.ipv4)
 		}
 		return q, nil
+
 	case v6Msg:
 		q.ipv6 = string(msg)
 		q.checkLoading()
-		if !q.isIP && q.isDetail && q.ipv4 == "Not Detected" && q.ipv6 != "Not Detected" && q.ipInfo.Status == "" {
+		if q.isDetail && q.ipv6 != "Not Detected" && !q.fetchingDetail && q.ipInfo.Status == "" {
+			q.fetchingDetail = true
 			return q, q.fetchDetailCmd(q.ipv6)
 		}
 		return q, nil
 
 	case detailMsg:
 		q.ipInfo = scanner.IPInfo(msg)
+		q.fetchingDetail = false
 		q.checkLoading()
 		return q, nil
 	}
@@ -145,11 +175,13 @@ func (q *ipQueryApp) View() string {
 			if q.ipInfo.City != "" {
 				locParts = append(locParts, q.ipInfo.City)
 			}
-			// 只有当省份与城市不同时才添加，避免 "Shanghai, Shanghai"
-			if q.ipInfo.RegionName != "" && q.ipInfo.RegionName != q.ipInfo.City {
+
+			if q.ipInfo.RegionName != "" &&
+				q.ipInfo.RegionName != q.ipInfo.City &&
+				q.ipInfo.RegionName != q.ipInfo.Country {
 				locParts = append(locParts, q.ipInfo.RegionName)
 			}
-			if q.ipInfo.Country != "" {
+			if q.ipInfo.Country != "" && q.ipInfo.Country != q.ipInfo.City {
 				locParts = append(locParts, q.ipInfo.Country)
 			}
 
@@ -177,7 +209,12 @@ func (q *ipQueryApp) View() string {
 	if q.message != "" {
 		b.WriteString(fmt.Sprintf("\n  %s\n", q.message))
 	} else {
-		b.WriteString("\n (Press 4/6 to copy, q to quit)\n")
+		var helpKeys []string
+		if !q.isDetail {
+			helpKeys = append(helpKeys, "d for detail")
+		}
+		helpKeys = append(helpKeys, "4/6 to copy", "q to quit")
+		b.WriteString(fmt.Sprintf("\n (%s)\n", strings.Join(helpKeys, ", ")))
 	}
 
 	return b.String()
