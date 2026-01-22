@@ -42,9 +42,15 @@ func (q *ipQueryApp) Init() tea.Cmd {
 		if ipObj.To4() != nil {
 			q.ipv4 = q.target
 			q.ipv6 = "Not Applicable"
+			if q.isDetail {
+				cmds = append(cmds, q.fetchDetailCmd(q.ipv4))
+			}
 		} else {
 			q.ipv6 = q.target
 			q.ipv4 = "Not Applicable"
+			if q.isDetail {
+				cmds = append(cmds, q.fetchDetailCmd(q.ipv6))
+			}
 		}
 
 		q.checkLoading()
@@ -65,6 +71,49 @@ func (q *ipQueryApp) fetchDetailCmd(ip string) tea.Cmd {
 	}
 }
 
+// refresh 刷新查询数据
+func (q *ipQueryApp) refresh() tea.Cmd {
+	// 重置状态
+	q.ipv4 = ""
+	q.ipv6 = ""
+	q.ipInfo = scanner.IPInfo{}
+	q.loading = true
+	q.fetchingDetail = false
+	q.message = "Refreshing..."
+
+	// 清除消息的定时器
+	clearMsg := tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return clearMessageMsg{}
+	})
+
+	// 判断是 IP 还是域名
+	if ipObj := net.ParseIP(q.target); ipObj != nil {
+		// 是 IP 地址
+		if ipObj.To4() != nil {
+			q.ipv4 = q.target
+			q.ipv6 = "Not Applicable"
+			if q.isDetail {
+				return tea.Batch(clearMsg, q.fetchDetailCmd(q.ipv4))
+			}
+		} else {
+			q.ipv6 = q.target
+			q.ipv4 = "Not Applicable"
+			if q.isDetail {
+				return tea.Batch(clearMsg, q.fetchDetailCmd(q.ipv6))
+			}
+		}
+		q.checkLoading()
+		return clearMsg
+	}
+
+	// 是域名或 localhost，需要查询 IPv4 和 IPv6
+	return tea.Batch(
+		clearMsg,
+		func() tea.Msg { return v4Msg(scanner.FetchV4(q.target)) },
+		func() tea.Msg { return v6Msg(scanner.FetchV6(q.target)) },
+	)
+}
+
 type v4Msg string
 type v6Msg string
 type detailMsg scanner.IPInfo
@@ -76,6 +125,10 @@ func (q *ipQueryApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return q, tea.Quit
+
+		case "r":
+			// 刷新/重新查询
+			return q, q.refresh()
 
 		case "d":
 			if !q.isDetail {
@@ -210,6 +263,7 @@ func (q *ipQueryApp) View() string {
 		b.WriteString(fmt.Sprintf("\n  %s\n", q.message))
 	} else {
 		var helpKeys []string
+		helpKeys = append(helpKeys, "r to refresh")
 		if !q.isDetail {
 			helpKeys = append(helpKeys, "d for detail")
 		}
@@ -244,7 +298,7 @@ func formatVal(v string) string {
 	if v == "" {
 		return "..."
 	}
-	return v
+	return scanner.FormatIPWithType(v)
 }
 func renderAttr(v bool) string {
 	if v {
