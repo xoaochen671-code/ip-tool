@@ -1,0 +1,32 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build
+        run: chmod +x build.sh && ./build.sh
+
+      - name: Test version
+        run: ./ipq version -v
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipq-linux-amd64
+          path: ipq

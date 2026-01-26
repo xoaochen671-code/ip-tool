@@ -9,18 +9,20 @@ A modern CLI/TUI tool for querying IP addresses and domains.
 - IP type identification (Public/Private/Loopback)
 - Geolocation and ISP information
 - Multiple input sources: args, clipboard, stdin, file
-- Multiple output formats: TUI, JSON, YAML, text
+- Multiple output formats: TUI, JSON, YAML, text, quiet
 - Respects `NO_COLOR` and auto-detects non-interactive environments
 
 ## Installation
 
 ```bash
-# Quick build
+# Build (Linux/macOS)
 go build -o ipq
 
-# Build with version info (recommended)
-./build.sh        # Linux/macOS
-build.cmd         # Windows
+# Build (Windows)
+go build -o ipq.exe
+
+# Build with version info (optional)
+# go build -o ipq -ldflags "-X github/shawn/ip-tool/cmd.Version=v0.1.0 -X github/shawn/ip-tool/cmd.GitCommit=abc123 -X github/shawn/ip-tool/cmd.BuildDate=2026-01-26"
 ```
 
 ## Usage
@@ -29,7 +31,7 @@ build.cmd         # Windows
 ipq [target] [flags]
 ```
 
-| Flag | Description |
+| Flag / Command | Description |
 |------|-------------|
 | `-c` | Read from clipboard |
 | `-d` | Show detailed info |
@@ -37,7 +39,7 @@ ipq [target] [flags]
 | `--batch` | Batch process from stdin |
 | `-o FORMAT` | Output: json, yaml, text, quiet |
 | `-q` | Quiet mode (only IPs) |
-| `-V` | Print version |
+| `version` | Print version (`--verbose` for details) |
 
 ## Examples
 
@@ -49,9 +51,27 @@ ipq -c                 # From clipboard
 echo "8.8.8.8" | ipq   # From stdin
 ipq -f ips.txt         # Batch from file
 ipq 8.8.8.8 -o json    # JSON output
+ipq 8.8.8.8 -q         # Quiet output (IPs only)
+ipq version --verbose  # Version details
 ```
 
-## Demo
+### Notes (Windows / PowerShell)
+
+- **Stdin with quotes**: PowerShell may include quotes when piping. `ipq` trims surrounding quotes, so these are both OK:
+
+```powershell
+echo "8.8.8.8" | ipq
+"8.8.8.8" | ipq
+```
+
+- **Batch YAML/JSON**:
+
+```powershell
+cat ips.txt | ipq --batch -o yaml
+cat ips.txt | ipq --batch -o json
+```
+
+## Demo (TUI output example)
 
 ```
 $ ipq 8.8.8.8 -d
@@ -145,16 +165,7 @@ flowchart TB
 |----------|-------------|
 | `NO_COLOR` | Disable colors |
 | `CI` | Force non-interactive mode |
-| `IPQ_CONFIG` | Custom config path |
 
-## Configuration
-
-`~/.config/ipq/config.yaml` or `~/.ipq.yaml`:
-
-```yaml
-show_detail: false
-timeout: 5s
-```
 
 ## Shell Completion
 
