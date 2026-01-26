@@ -84,77 +84,20 @@ $ ipq 8.8.8.8 -d
 
 ## Architecture
 
+Layered architecture with **one-way dependencies** (no cycles):
+
 ```mermaid
 flowchart TB
-  %% 目标：清晰展示分层架构 + 单向依赖（无循环）
+  %% 分层依赖（单向，无循环） + 节点内展示职责
+  CMD["cmd<br/>(Cobra commands)<br/>wire everything"] --> CLI["internal/cli<br/>(CLI utils)<br/>stdin/batch/config/exit"]
+  CMD --> TUI["internal/tui<br/>(TUI)<br/>Bubble Tea UI"]
+  CMD --> OUT["internal/output<br/>(output)<br/>text/json/yaml + styles + errors"]
 
-  subgraph CMD[cmd]
-    cmd_root[root.go]
-    cmd_version[version.go]
-    cmd_completion[completion.go]
-  end
-
-  subgraph CLI[internal/cli]
-    cli_input[input.go]
-    cli_batch[batch.go]
-    cli_config[config.go]
-    cli_exit[exit.go]
-  end
-
-  subgraph TUI[internal/tui]
-    tui_app[app.go]
-  end
-
-  subgraph OUT[internal/output]
-    out_format[format.go]
-    out_style[style.go]
-    out_error[error.go]
-  end
-
-  subgraph NET[internal/network]
-    net_dns[dns.go]
-    net_fetch[fetch.go]
-    net_resolve[resolve.go]
-    net_types[types.go]
-  end
-
-  subgraph IP[internal/ip]
-    ip_classify[classify.go]
-    ip_validate[validate.go]
-  end
-
-  %% 依赖关系（单向）
-  CMD --> CLI
-  CMD --> TUI
-  CMD --> OUT
-  CMD --> IP
-
-  CLI --> IP
-  CLI --> OUT
-
-  TUI --> NET
-  TUI --> OUT
-
+  CLI --> IP["internal/ip<br/>(core)<br/>extract/validate/classify"]
+  OUT --> NET["internal/network<br/>(network)<br/>DNS + HTTP + timeouts"]
   OUT --> IP
-  OUT --> NET
-
+  TUI --> NET
   NET --> IP
-```
-
-**依赖方向 (严格单向，无循环):**
-
-```
-ip        ← 底层，0 依赖
- ↑
-network   ← 依赖 ip
- ↑
-output    ← 依赖 ip, network
- ↑
-tui       ← 依赖 network, output
- ↑
-cli       ← 依赖 ip, output
- ↑
-cmd       ← 依赖 cli, tui, output, ip
 ```
 
 ## Project Structure
