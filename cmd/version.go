@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 
 	"github.com/spf13/cobra"
@@ -33,15 +34,15 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show verbose version info")
+	versionCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show verbose version info")
 
-	// -V 显示版本
-	rootCmd.Flags().BoolP("version", "V", false, "Print version")
-	rootCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+	// -V/--version: 直接打印版本并以 0 退出（避免进入主逻辑）
+	// CLI Guidelines: 每个 CLI 都应该支持 --version
+	rootCmd.PersistentFlags().BoolP("version", "V", false, "Print version")
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		if v, _ := cmd.Flags().GetBool("version"); v {
-			versionCmd.Run(cmd, args)
-			return fmt.Errorf("")
+			fmt.Printf("ipq %s\n", Version)
+			os.Exit(0)
 		}
-		return nil
 	}
 }
