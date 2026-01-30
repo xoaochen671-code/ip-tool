@@ -35,6 +35,26 @@ const (
 	TypeInvalid     Type = "Invalid"     // 无效地址
 )
 
+var reservedBlocks []*net.IPNet
+
+func init() {
+	networks := []string{
+		"100.64.0.0/10",      // Shared Address Space (CGNAT)
+		"192.0.0.0/24",       // IETF Protocol Assignments
+		"192.0.2.0/24",       // Documentation (TEST-NET-1)
+		"198.18.0.0/15",      // Benchmarking (你提到的那个)
+		"198.51.100.0/24",    // Documentation (TEST-NET-2)
+		"203.0.113.0/24",     // Documentation (TEST-NET-3)
+		"240.0.0.0/4",        // Reserved for Future Use
+		"255.255.255.255/32", // Limited Broadcast
+	}
+
+	for _, n := range networks {
+		_, block, _ := net.ParseCIDR(n)
+		reservedBlocks = append(reservedBlocks, block)
+	}
+}
+
 // Classify 分析 IP 地址并返回其类型
 func Classify(ipStr string) Type {
 	ipStr = strings.TrimSpace(ipStr)
@@ -57,15 +77,22 @@ func Classify(ipStr string) Type {
 		return TypeUnspecified
 	case ip.IsLoopback():
 		return TypeLoopback
-	case ip.IsPrivate():
-		return TypePrivate
-	case ip.IsLinkLocalUnicast():
+	case ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast():
 		return TypeLinkLocal
 	case ip.IsMulticast():
 		return TypeMulticast
+	case ip.IsPrivate():
+		return TypePrivate
 	default:
-		return TypePublic
+		// 公网检查是否是特殊保留网段
 	}
+	// 检查你定义的特殊保留网段
+	for _, block := range reservedBlocks {
+		if block.Contains(ip) {
+			return TypePrivate
+		}
+	}
+	return TypeInvalid
 }
 
 // IsValid 检查字符串是否为有效 IP 地址
