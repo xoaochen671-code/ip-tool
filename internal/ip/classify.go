@@ -92,7 +92,7 @@ func Classify(ipStr string) Type {
 			return TypePrivate
 		}
 	}
-	return TypeInvalid
+	return TypePublic
 }
 
 // IsValid 检查字符串是否为有效 IP 地址
